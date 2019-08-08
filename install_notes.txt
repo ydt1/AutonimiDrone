@@ -1,0 +1,18 @@
+Connect the drone to pi using USB (can also connect using serial cables)
+http://ardupilot.org/dev/docs/raspberry-pi-via-mavlink.html
+sudo apt-get update
+note: use python-wxgtk3.0 not python-wxgtk2.8
+sudo apt-get install screen python-wxgtk3.0 python-matplotlib python-opencv python-pip python-numpy python-dev libxml2-dev libxslt-dev python-lxml
+
+check the name of the USB connection:
+cd /dev/serial/by-id
+ls /dev/tty*
+lsusb
+ls /dev/serial/by-*
+test connection: 
+sudo -s
+mavproxy.py --master=/dev/ttyACM0 --baudrate 921600 --aircraft MyCopter
+install DroneKit (see dronekit site)
+sudo apt-get install python-pip python-dev
+pip install dronekit
+pip install dronekit-sitl
