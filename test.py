@@ -19,7 +19,7 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     """
     global vehicle
     ##### CONSTANTS #####
-    DEFAULT_TAKEOFF_THRUST = 0.3 #0.7
+    DEFAULT_TAKEOFF_THRUST = 0.6 #0.7
     SMOOTH_TAKEOFF_THRUST = 0.6
         
     print("Basic pre-arm checks")
@@ -34,15 +34,15 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     # Copter should arm in GUIDED_NOGPS mode
     vehicle.mode = VehicleMode("GUIDED_NOGPS")
     vehicle.armed = True
-    print(vehicle.armed)
+    
     while not vehicle.armed:
 	print(" Waiting for arming...")
         time.sleep(1)
+    print(vehicle.armed)
     print("Taking off!")
 
     thrust = DEFAULT_TAKEOFF_THRUST
-    for i in range(1000):
-    #while True:
+    while True:
         current_altitude = vehicle.location.global_relative_frame.alt
         print(" Altitude: %s" % current_altitude)
         if current_altitude >= aTargetAltitude*0.95: # Trigger just below target alt.
@@ -125,8 +125,27 @@ def main():
     connect2Drone()
     
     # Take off 2.5m in GUIDED_NOGPS mode.
-    arm_and_takeoff_nogps(2.5)
+    arm_and_takeoff_nogps(1.5)
     #quit()	
+    
+    # Uncomment the lines below for testing roll angle and yaw rate.
+    # Make sure that there is enough space for testing this.
+
+    # set_attitude(roll_angle = 1, thrust = 0.5, duration = 3)
+    # set_attitude(yaw_rate = 30, thrust = 0.5, duration = 3)
+
+    # Move the drone forward and backward.
+    # Note that it will be in front of original position due to inertia.
+    #print("Move forward")
+    #set_attitude(pitch_angle = 1, thrust = 0.5, duration = 3.21)
+
+    #print("Move backward")
+    #set_attitude(pitch_angle = -1, thrust = 0.5, duration = 3)    
+    
+    
+    
+    
+    
     print("Setting LAND mode...")
     vehicle.mode = VehicleMode("LAND")
     time.sleep(1)
@@ -138,4 +157,3 @@ def main():
     print("Completed")
 if __name__ == "__main__":
 	main()
-	
