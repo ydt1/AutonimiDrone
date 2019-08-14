@@ -4,6 +4,11 @@ sudo apt-get update
 note: use python-wxgtk3.0 not python-wxgtk2.8
 sudo apt-get install screen python-wxgtk3.0 python-matplotlib python-opencv python-pip python-numpy python-dev libxml2-dev libxslt-dev python-lxml
 
+sample code:
+
+https://github.com/studroid/dronekit-python/blob/84b68270d31798568602f36d06ee8c85c2b100ce/examples/change_attribute/change_attitude.py
+
+
 check the name of the USB connection:
 cd /dev/serial/by-id
 ls /dev/tty*
