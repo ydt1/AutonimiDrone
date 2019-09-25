@@ -1,11 +1,104 @@
-from dronekit import connect, VehicleMode, LocationGlobal, LocationGlobalRelative
-from pymavlink import mavutil # Needed for command message definitions
+import sys, getopt
+
+sys.path.append('.')
+import RTIMU
+import os.path
 import time
 import math
+import threading
+import logging
+
+from dronekit import connect, VehicleMode, LocationGlobal, LocationGlobalRelative
+from pymavlink import mavutil # Needed for command message definitions
+
 
 connection_string = '/dev/ttyACM0'
 vehicle=0
+SETTINGS_FILE = "RTIMULib"
+x,y,z = 0.0,0.0,0.0
 
+
+def wait_for_calibrate():
+    global x
+    global y
+    global z
+    while (x == 0.0 and y == 0.0 and z == 0.0):
+        print("still calibrate", x,y,z)
+        time.sleep(0.1)
+        
+def getIMU_DATA(name):
+    global x
+    global y
+    global z
+    logging.info("Thread %s: starting", name)
+    print("Using settings file " + SETTINGS_FILE + ".ini")
+    if not os.path.exists(SETTINGS_FILE + ".ini"):
+      print("Settings file does not exist, will be created")
+
+    s = RTIMU.Settings(SETTINGS_FILE)
+    imu = RTIMU.RTIMU(s)
+
+    print("IMU Name: " + imu.IMUName())
+
+    if (not imu.IMUInit()):
+        print("IMU Init Failed")
+        sys.exit(1)
+    else:
+        print("IMU Init Succeeded");
+
+    # this is a good time to set any fusion parameters
+
+    imu.setSlerpPower(0.02)
+    imu.setGyroEnable(True)
+    imu.setAccelEnable(True)
+    imu.setCompassEnable(True)
+
+    poll_interval = imu.IMUGetPollInterval()
+    print("Recommended Poll Interval: %dmS\n" % poll_interval)
+    ################## calibrate
+    sampleCount = 0
+    geroR=0
+    geroP=0
+    geroY=0
+    print "calibrating..."
+    for i in range(3000):
+	  if imu.IMURead():
+		data = imu.getIMUData()
+		fusionPose = data["fusionPose"]
+		geroR += truncFloat(math.degrees(fusionPose[0]))
+		geroP += truncFloat(math.degrees(fusionPose[1]))
+		geroY += truncFloat(math.degrees(fusionPose[2]))
+		sampleCount+=1;
+		print("r: %f p: %f y: %f" % (truncFloat(math.degrees(fusionPose[0])), 
+			truncFloat(math.degrees(fusionPose[1])), truncFloat(math.degrees(fusionPose[2]))))
+		time.sleep(poll_interval*1.0/1000.0)
+    
+    geroR = truncFloat(geroR/sampleCount)
+    geroP = truncFloat(geroP/sampleCount)
+    geroY = truncFloat(geroY/sampleCount)
+    print ("sample count=",sampleCount)
+    print ("Roll offset=",geroR)
+    print ("Pitch offset=",geroP)
+    print ("Yaw offset=",geroY)
+    print "*************** Done calibrating ***************"
+   
+    ##################
+    while True:	
+        if imu.IMURead():
+            # x, y, z = imu.getFusionData()
+            # print("%f %f %f" % (x,y,z))
+            data = imu.getIMUData()
+            fusionPose = data["fusionPose"]
+            #print("r: %.1f p: %.1f y: %.1f" % (truncFloat(math.degrees(fusionPose[0])-geroR), 
+            #    truncFloat(math.degrees(fusionPose[1])-geroP), truncFloat(math.degrees(fusionPose[2])-geroY)))
+            x,y,z = truncFloat(math.degrees(fusionPose[0])-geroR), truncFloat(math.degrees(fusionPose[1])-geroP), truncFloat(math.degrees(fusionPose[2])-geroY)
+            time.sleep(poll_interval*1.0/1000.0)
+     
+    
+
+def truncFloat(f):
+    return float('%.2f'%f)
+    
 def connect2Drone():
     global vehicle
     # Connect to the Vehicle
@@ -19,8 +112,8 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     """
     global vehicle
     ##### CONSTANTS #####
-    DEFAULT_TAKEOFF_THRUST = 0.6 #0.7
-    SMOOTH_TAKEOFF_THRUST = 0.6
+    DEFAULT_TAKEOFF_THRUST = 0.55 #0.7
+    SMOOTH_TAKEOFF_THRUST = 0.55
         
     print("Basic pre-arm checks")
     # Don't let the user try to arm until autopilot is ready
@@ -33,14 +126,15 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     print("Arming motors")
     # Copter should arm in GUIDED_NOGPS mode
     vehicle.mode = VehicleMode("GUIDED_NOGPS")
-    vehicle.armed = True
+    """vehicle.armed = True
     
     while not vehicle.armed:
 	print(" Waiting for arming...")
         time.sleep(1)
     print(vehicle.armed)
     print("Taking off!")
-
+    """
+    wait_for_calibrate()
     thrust = DEFAULT_TAKEOFF_THRUST
     while True:
         current_altitude = vehicle.location.global_relative_frame.alt
@@ -50,10 +144,12 @@ def arm_and_takeoff_nogps(aTargetAltitude):
             break
         elif current_altitude >= aTargetAltitude*0.6:
             thrust = SMOOTH_TAKEOFF_THRUST
-        set_attitude(thrust = thrust)
-        time.sleep(0.2)
+        print ("global values:",x,y,z)
+        # check the we don't get -1 on all values
+        #set_attitude(thrust = thrust)
+        time.sleep(0.01)
         
-def set_attitude(roll_angle = 0.0, pitch_angle = 0.0, yaw_rate = 0.0, thrust = 0.5, duration = 0):
+def set_attitude(roll_angle = 0, pitch_angle = 0.0, yaw_rate = 0.0, thrust = 0.5, duration = 0):
     """
     Note that from AC3.3 the message should be re-sent every second (after about 3 seconds
     with no message the velocity will drop back to zero). In AC3.2.1 and earlier the specified
@@ -62,6 +158,7 @@ def set_attitude(roll_angle = 0.0, pitch_angle = 0.0, yaw_rate = 0.0, thrust = 0
     """
     
     """
+    
     The roll and pitch rate cannot be controllbed with rate in radian in AC3.4.4 or earlier,
     so you must use quaternion to control the pitch and roll for those vehicles.
     """
@@ -119,13 +216,23 @@ def to_quaternion(roll = 0.0, pitch = 0.0, yaw = 0.0):
     
     return [w, x, y, z]
 
-            
-            
+        
 def main():
+    
     connect2Drone()
     
+    logging.info("Main    : before creating thread")
+    x = threading.Thread(target=getIMU_DATA, args=(1,))
+    logging.info("Main    : before running thread")
+    x.daemon = True
+    x.start()
+    logging.info("Main    : wait for the thread to finish")
     # Take off 2.5m in GUIDED_NOGPS mode.
-    arm_and_takeoff_nogps(1.5)
+    arm_and_takeoff_nogps(10.3)
+    x.join()
+    logging.info("Main    : all done")    
+        
+
     #quit()	
     
     # Uncomment the lines below for testing roll angle and yaw rate.
@@ -142,18 +249,19 @@ def main():
     #print("Move backward")
     #set_attitude(pitch_angle = -1, thrust = 0.5, duration = 3)    
     
+    time.sleep(10000)
     
     
     
-    
-    print("Setting LAND mode...")
-    vehicle.mode = VehicleMode("LAND")
-    time.sleep(1)
+    #print("Setting LAND mode...")
+    #vehicle.mode = VehicleMode("LAND")
+    #time.sleep(1)
 
     # Close vehicle object before exiting script
-    print("Close vehicle object")
-    vehicle.close()
+    #print("Close vehicle object")
+    #vehicle.close()
 
     print("Completed")
 if __name__ == "__main__":
 	main()
+	
