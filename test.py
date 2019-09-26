@@ -10,26 +10,27 @@ import logging
 
 from dronekit import connect, VehicleMode, LocationGlobal, LocationGlobalRelative
 from pymavlink import mavutil # Needed for command message definitions
+from simple_pid import PID
 
 
 connection_string = '/dev/ttyACM0'
 vehicle=0
 SETTINGS_FILE = "RTIMULib"
-x,y,z = 0.0,0.0,0.0
+r,p,y = 0.0,0.0,0.0
 
 
 def wait_for_calibrate():
-    global x
+    global r
+    global p
     global y
-    global z
-    while (x == 0.0 and y == 0.0 and z == 0.0):
-        print("still calibrate", x,y,z)
+    while (r == 0.0 and p == 0.0 and y == 0.0):
+        print("still calibrate", r,p,y)
         time.sleep(0.1)
         
 def getIMU_DATA(name):
-    global x
+    global r
+    global p
     global y
-    global z
     logging.info("Thread %s: starting", name)
     print("Using settings file " + SETTINGS_FILE + ".ini")
     if not os.path.exists(SETTINGS_FILE + ".ini"):
@@ -91,9 +92,11 @@ def getIMU_DATA(name):
             fusionPose = data["fusionPose"]
             #print("r: %.1f p: %.1f y: %.1f" % (truncFloat(math.degrees(fusionPose[0])-geroR), 
             #    truncFloat(math.degrees(fusionPose[1])-geroP), truncFloat(math.degrees(fusionPose[2])-geroY)))
-            x,y,z = truncFloat(math.degrees(fusionPose[0])-geroR), truncFloat(math.degrees(fusionPose[1])-geroP), truncFloat(math.degrees(fusionPose[2])-geroY)
+            r,p,y = truncFloat(math.degrees(fusionPose[0])-geroR)* -1, truncFloat(math.degrees(fusionPose[1])-geroP), truncFloat(math.degrees(fusionPose[2])-geroY)
+            if (r > 180):
+                r = r - 360
             time.sleep(poll_interval*1.0/1000.0)
-     
+            
     
 
 def truncFloat(f):
@@ -111,10 +114,12 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     Arms vehicle and fly to aTargetAltitude without GPS data.
     """
     global vehicle
+    pidR = PID(0.4, 0, 0.05, setpoint=0)
+    pidP = PID(0.4, 0, 0.05, setpoint=0)
     ##### CONSTANTS #####
     DEFAULT_TAKEOFF_THRUST = 0.55 #0.7
     SMOOTH_TAKEOFF_THRUST = 0.55
-        
+    wait_for_calibrate()    
     print("Basic pre-arm checks")
     # Don't let the user try to arm until autopilot is ready
     # If you need to disable the arming check, just comment it with your own responsibility.
@@ -126,28 +131,35 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     print("Arming motors")
     # Copter should arm in GUIDED_NOGPS mode
     vehicle.mode = VehicleMode("GUIDED_NOGPS")
-    """vehicle.armed = True
+    vehicle.armed = True
     
     while not vehicle.armed:
 	print(" Waiting for arming...")
         time.sleep(1)
     print(vehicle.armed)
     print("Taking off!")
-    """
-    wait_for_calibrate()
+    
+    
     thrust = DEFAULT_TAKEOFF_THRUST
     while True:
         current_altitude = vehicle.location.global_relative_frame.alt
-        print(" Altitude: %s" % current_altitude)
+        #print(" Altitude: %s" % current_altitude)
         if current_altitude >= aTargetAltitude*0.95: # Trigger just below target alt.
             print("Reached target altitude")
             break
         elif current_altitude >= aTargetAltitude*0.6:
             thrust = SMOOTH_TAKEOFF_THRUST
-        print ("global values:",x,y,z)
+        
+        controlR = pidR(r)
+        controlP = pidP(p)
+        print ("r: %.1f p: %.1f y: %.1f a: %.1f" % (r,p,y,current_altitude))
+        print("controlP",controlP)
+        print("controlR",controlR)
+        
         # check the we don't get -1 on all values
-        #set_attitude(thrust = thrust)
-        time.sleep(0.01)
+        set_attitude(roll_angle = r, pitch_angle = p, thrust = thrust)
+        
+        time.sleep(0.1)
         
 def set_attitude(roll_angle = 0, pitch_angle = 0.0, yaw_rate = 0.0, thrust = 0.5, duration = 0):
     """
@@ -228,7 +240,7 @@ def main():
     x.start()
     logging.info("Main    : wait for the thread to finish")
     # Take off 2.5m in GUIDED_NOGPS mode.
-    arm_and_takeoff_nogps(10.3)
+    arm_and_takeoff_nogps(1.5)
     x.join()
     logging.info("Main    : all done")    
         
