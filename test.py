@@ -24,7 +24,7 @@ def wait_for_calibrate():
     global p
     global y
     while (r == 0.0 and p == 0.0 and y == 0.0):
-        print("still calibrate", r,p,y)
+        logging.info("still calibrate %.1f, %.1f, %.1f", r,p,y)
         time.sleep(0.1)
         
 def getIMU_DATA(name):
@@ -32,20 +32,20 @@ def getIMU_DATA(name):
     global p
     global y
     logging.info("Thread %s: starting", name)
-    print("Using settings file " + SETTINGS_FILE + ".ini")
+    logging.info("Using settings file " + SETTINGS_FILE + ".ini")
     if not os.path.exists(SETTINGS_FILE + ".ini"):
       print("Settings file does not exist, will be created")
 
     s = RTIMU.Settings(SETTINGS_FILE)
     imu = RTIMU.RTIMU(s)
 
-    print("IMU Name: " + imu.IMUName())
+    logging.info("IMU Name: " + imu.IMUName())
 
     if (not imu.IMUInit()):
-        print("IMU Init Failed")
+        logging.error("IMU Init Failed")
         sys.exit(1)
     else:
-        print("IMU Init Succeeded");
+        logging.info("IMU Init Succeeded");
 
     # this is a good time to set any fusion parameters
 
@@ -55,13 +55,16 @@ def getIMU_DATA(name):
     imu.setCompassEnable(True)
 
     poll_interval = imu.IMUGetPollInterval()
-    print("Recommended Poll Interval: %dmS\n" % poll_interval)
+    logging.info("Recommended Poll Interval: %dmS\n", poll_interval)
+    #geroR,geroP,geroY=143.24, -13.9,-25.4
+    geroR,geroP,geroY=0.0,0.0,0.0
+    
     ################## calibrate
     sampleCount = 0
     geroR=0
     geroP=0
     geroY=0
-    print "calibrating..."
+    logging.info("calibrating...")
     for i in range(3000):
 	  if imu.IMURead():
 		data = imu.getIMUData()
@@ -70,18 +73,18 @@ def getIMU_DATA(name):
 		geroP += truncFloat(math.degrees(fusionPose[1]))
 		geroY += truncFloat(math.degrees(fusionPose[2]))
 		sampleCount+=1;
-		print("r: %f p: %f y: %f" % (truncFloat(math.degrees(fusionPose[0])), 
-			truncFloat(math.degrees(fusionPose[1])), truncFloat(math.degrees(fusionPose[2]))))
+		logging.debug("r: %f p: %f y: %f",truncFloat(math.degrees(fusionPose[0])), 
+			truncFloat(math.degrees(fusionPose[1])), truncFloat(math.degrees(fusionPose[2])))
 		time.sleep(poll_interval*1.0/1000.0)
     
     geroR = truncFloat(geroR/sampleCount)
     geroP = truncFloat(geroP/sampleCount)
     geroY = truncFloat(geroY/sampleCount)
-    print ("sample count=",sampleCount)
-    print ("Roll offset=",geroR)
-    print ("Pitch offset=",geroP)
-    print ("Yaw offset=",geroY)
-    print "*************** Done calibrating ***************"
+    logging.info ("sample count= %d",sampleCount)
+    logging.info ("Roll offset= %.1f",geroR)
+    logging.info ("Pitch offset= %.1f",geroP)
+    logging.info ("Yaw offset= %.1f",geroY)
+    logging.info ("*************** Done calibrating ***************")
    
     ##################
     while True:	
@@ -93,8 +96,8 @@ def getIMU_DATA(name):
             #print("r: %.1f p: %.1f y: %.1f" % (truncFloat(math.degrees(fusionPose[0])-geroR), 
             #    truncFloat(math.degrees(fusionPose[1])-geroP), truncFloat(math.degrees(fusionPose[2])-geroY)))
             r,p,y = truncFloat(math.degrees(fusionPose[0])-geroR)* -1, truncFloat(math.degrees(fusionPose[1])-geroP), truncFloat(math.degrees(fusionPose[2])-geroY)
-            if (r > 180):
-                r = r - 360
+            if (r < -180):
+                r = r + 360
             time.sleep(poll_interval*1.0/1000.0)
             
     
@@ -105,9 +108,11 @@ def truncFloat(f):
 def connect2Drone():
     global vehicle
     # Connect to the Vehicle
-    print('Connecting to vehicle on: %s' % connection_string)
+    logging.info('Connecting to vehicle on: %s' % connection_string)
     vehicle = connect(connection_string, wait_ready=True)
-    print("connected")
+    logging.info("connected")
+    print(" Attitude: %s" % vehicle.attitude)
+    print(" Battery: %s" % vehicle.battery)
 
 def arm_and_takeoff_nogps(aTargetAltitude):
     """
@@ -120,44 +125,61 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     DEFAULT_TAKEOFF_THRUST = 0.55 #0.7
     SMOOTH_TAKEOFF_THRUST = 0.55
     wait_for_calibrate()    
-    print("Basic pre-arm checks")
+    logging.info("Basic pre-arm checks")
     # Don't let the user try to arm until autopilot is ready
     # If you need to disable the arming check, just comment it with your own responsibility.
     #while not vehicle.is_armable:
-     #   print(" Waiting for vehicle to initialise...")
+     #   logging.info(" Waiting for vehicle to initialise...")
       #  time.sleep(1)
 
-    print("is armable=",vehicle.is_armable)
-    print("Arming motors")
+    logging.info("is armable=%s",vehicle.is_armable)
+    logging.info("Arming motors")
+    
     # Copter should arm in GUIDED_NOGPS mode
     vehicle.mode = VehicleMode("GUIDED_NOGPS")
     vehicle.armed = True
     
     while not vehicle.armed:
-	print(" Waiting for arming...")
+	logging.info(" Waiting for arming...")
         time.sleep(1)
-    print(vehicle.armed)
-    print("Taking off!")
-    
-    
+    logging.info(vehicle.armed)
+    logging.info("Taking off!")
+    controlR = 0
+    controlP = 0
+    controlPCount = 8
     thrust = DEFAULT_TAKEOFF_THRUST
     while True:
         current_altitude = vehicle.location.global_relative_frame.alt
-        #print(" Altitude: %s" % current_altitude)
+        #logging.info(" Altitude: %s" % current_altitude)
         if current_altitude >= aTargetAltitude*0.95: # Trigger just below target alt.
-            print("Reached target altitude")
+            logging.info("Reached target altitude")
+            set_attitude(thrust = 0.5) 
             break
         elif current_altitude >= aTargetAltitude*0.6:
             thrust = SMOOTH_TAKEOFF_THRUST
         
-        controlR = pidR(r)
-        controlP = pidP(p)
-        print ("r: %.1f p: %.1f y: %.1f a: %.1f" % (r,p,y,current_altitude))
-        print("controlP",controlP)
-        print("controlR",controlR)
+        #controlR = pidR(r)
+        #controlP = pidP(p)
+       
+        if (r<0.040 and r > -0.040):
+            logging.info ("r between -0.040 to 0.040")
+        elif (r<0):
+            controlR = 1
+        else:
+            controlR = -1
         
-        # check the we don't get -1 on all values
-        set_attitude(roll_angle = r, pitch_angle = p, thrust = thrust)
+        if (controlPCount % 8 ==0):       
+            if (p<0.02):
+                controlP = 3.2
+            else:
+                controlP = -0.5       
+        else:
+            controlPCount = controlPCount + 1
+            
+        logging.info ("r: %.1f p: %.1f y: %.1f a: %.1f", r,p,y,current_altitude)
+        logging.info("controlP: %.1f controlR %.1f", controlP,controlR)
+         # check the we don't get -1 on all values
+        set_attitude(roll_angle = controlR, pitch_angle = controlP, thrust = thrust)
         
         time.sleep(0.1)
         
@@ -228,20 +250,52 @@ def to_quaternion(roll = 0.0, pitch = 0.0, yaw = 0.0):
     
     return [w, x, y, z]
 
-        
+     
+#Define callback for `vehicle.attitude` observer
+last_attitude_cache = None
+def attitude_callback(self, attr_name, value):
+    global r
+    global p
+    global y
+    # `attr_name` - the observed attribute (used if callback is used for multiple attributes)
+    # `self` - the associated vehicle object (used if a callback is different for multiple vehicles)
+    # `value` is the updated attribute value.
+    global last_attitude_cache
+    # Only publish when value changes
+    if value!=last_attitude_cache:
+        #print(" CALLBACK: Attitude changed to", value.pitch)
+        logging.info ("r: %.3f p: %.3f y: %.1f a: %.1f", value.roll,value.pitch,value.yaw,vehicle.location.global_relative_frame.alt)
+        r,p,y = value.roll,value.pitch,value.yaw
+        last_attitude_cache=value
+
+     
 def main():
+    
+    
+    #logging.basicConfig(format='%(asctime)s %(message)s',level=logging.DEBUG,filename='test.log')
+    logging.basicConfig(format='%(asctime)s %(message)s',level=logging.DEBUG)
     
     connect2Drone()
     
-    logging.info("Main    : before creating thread")
-    x = threading.Thread(target=getIMU_DATA, args=(1,))
-    logging.info("Main    : before running thread")
-    x.daemon = True
-    x.start()
-    logging.info("Main    : wait for the thread to finish")
+    logging.info("\nAdd `attitude` attribute callback/observer on `vehicle`")     
+    vehicle.add_attribute_listener('attitude', attitude_callback)
+    #time.sleep(1000)
+    #quit()
+    
+    
+    #logging.info("Main    : before creating thread")
+    #x = threading.Thread(target=getIMU_DATA, args=(1,))
+    #logging.info("Main    : before running thread")
+    #x.daemon = True
+    #x.start()
+    #logging.info("Main    : wait for the thread to finish")
     # Take off 2.5m in GUIDED_NOGPS mode.
-    arm_and_takeoff_nogps(1.5)
-    x.join()
+    arm_and_takeoff_nogps(1.3)
+    logging.info("Setting LAND mode...")
+    vehicle.mode = VehicleMode("LAND")
+    #time.sleep(1)
+
+    #x.join()
     logging.info("Main    : all done")    
         
 
@@ -261,19 +315,16 @@ def main():
     #print("Move backward")
     #set_attitude(pitch_angle = -1, thrust = 0.5, duration = 3)    
     
-    time.sleep(10000)
+    #time.sleep(10000)
     
     
     
-    #print("Setting LAND mode...")
-    #vehicle.mode = VehicleMode("LAND")
-    #time.sleep(1)
-
+    
     # Close vehicle object before exiting script
-    #print("Close vehicle object")
-    #vehicle.close()
+    logging.info("Close vehicle object")
+    vehicle.close()
 
-    print("Completed")
+    logging.info("Completed")
 if __name__ == "__main__":
 	main()
 	
