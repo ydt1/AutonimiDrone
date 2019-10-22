@@ -37,43 +37,44 @@ def wait_for_calibrate():
         logging.info("still calibrate %.1f, %.1f, %.1f", r,p,y)
         time.sleep(0.1)
         
-def get_distance():
+def get_distance(name):
     global current_altitude
-    
     #*********** don't put any print / logging from here *************
-    GPIO.output(GPIO_TRIGGER, True)
- 
-    # set Trigger after 0.01ms to LOW
-    time.sleep(0.00001)
-    GPIO.output(GPIO_TRIGGER, False)
- 
-    StartTime = time.time()
-    StopTime = time.time()
-    
-    while GPIO.input(GPIO_ECHO) == 0:
+    logging.info("Starting get distance threading")
+    while True:
+        GPIO.output(GPIO_TRIGGER, True)
+     
+        # set Trigger after 0.01ms to LOW
+        time.sleep(0.00001)
+        GPIO.output(GPIO_TRIGGER, False)
+     
         StartTime = time.time()
-        
-    # save time of arrival
-    
-    while GPIO.input(GPIO_ECHO) == 1:
         StopTime = time.time()
         
-    #*********** don't put any print / logging up to here *************
-    
-    
-    # time difference between start and arrival
-    TimeElapsed = StopTime - StartTime
-    # multiply with the sonic speed (34300 cm/s)
-    # and divide by 2, because there and back
-    distance = (TimeElapsed * 34300) / 2
-    distance = float(distance / 100) # In meters...
-    
-    if abs(current_altitude-distance)>0.5 or distance > 5:
-        logging.info("distance too high, might be bad data %.1f", distance)
-    else:
-        current_altitude=distance
-    
-    return current_altitude        
+        while GPIO.input(GPIO_ECHO) == 0:
+            StartTime = time.time()
+            
+        # save time of arrival
+        
+        while GPIO.input(GPIO_ECHO) == 1:
+            StopTime = time.time()
+            
+        #*********** don't put any print / logging up to here *************
+        
+        
+        # time difference between start and arrival
+        TimeElapsed = StopTime - StartTime
+        # multiply with the sonic speed (34300 cm/s)
+        # and divide by 2, because there and back
+        distance = (TimeElapsed * 34300) / 2
+        distance = float(distance / 100) # In meters...
+        
+        if abs(current_altitude-distance)>0.5 or distance > 5: # sometimes the ultrasonic sends bad high values - fliter them out
+            logging.info("distance too high, might be bad data %.1f", distance)
+        else:
+            current_altitude=distance
+        time.sleep(0.2)    
+       
 
 
 
@@ -93,11 +94,7 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     """
     Arms vehicle and fly to aTargetAltitude without GPS data.
     """
-    global current_altitude
     global vehicle
-    #pidR = PID(0.4, 0, 0.05, setpoint=0)
-    #pidP = PID(0.4, 0, 0.05, setpoint=0)
-    ##### CONSTANTS #####
     DEFAULT_TAKEOFF_THRUST = 0.55 #0.7
     SMOOTH_TAKEOFF_THRUST = 0.55
     #wait_for_calibrate()    
@@ -128,8 +125,6 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     thrust = DEFAULT_TAKEOFF_THRUST
     while True:
         #current_altitude = vehicle.location.global_relative_frame.alt #take from the pix not accurate for us, will use ultrasonic
-        get_distance()
-        
         if current_altitude >= aTargetAltitude*0.95: # Trigger just below target alt.
             logging.info("Reached target altitude")
             set_attitude(thrust = 0.5) 
@@ -140,9 +135,7 @@ def arm_and_takeoff_nogps(aTargetAltitude):
             else:    
                 thrust = SMOOTH_TAKEOFF_THRUST
         CountThrust+=1
-        #controlR = pidR(r)
-        #controlP = pidP(p)
-       
+        
         if (controlRCount % 8 ==0):     
             if (r<0.040 and r > -0.040):
                 logging.info ("r between -0.040 to 0.040")
@@ -260,55 +253,24 @@ def main():
     
     #logging.basicConfig(format='%(asctime)s %(message)s',level=logging.DEBUG,filename='test.log')
     logging.basicConfig(format='%(asctime)s %(message)s',level=logging.DEBUG)
-     
+    logging.info("\nAdd `attitude` attribute callback/observer on `vehicle`")  
     connect2Drone()
-    
-    logging.info("\nAdd `attitude` attribute callback/observer on `vehicle`")     
     vehicle.add_attribute_listener('attitude', attitude_callback)
-    
-    
-    #logging.info("Main    : before creating thread")
-    #x = threading.Thread(target=getIMU_DATA, args=(1,))
-    #logging.info("Main    : before running thread")
-    #x.daemon = True
-    #x.start()
-    #logging.info("Main    : wait for the thread to finish")
-    # Take off 2.5m in GUIDED_NOGPS mode.
     try:
-        arm_and_takeoff_nogps(1.3)
+        logging.info("Main    : before creating thread")
+        x = threading.Thread(target=get_distance, args=(1,))
+        logging.info("Main    : before running thread")
+        x.daemon = True
+        x.start()
+        logging.info("Main    : wait for the thread to finish")   
+        #Take off 2.5m in GUIDED_NOGPS mode.
+        arm_and_takeoff_nogps(1.3)  
+        #x.join()
+        logging.info("Main    : all done") 
     except KeyboardInterrupt:
         print("Measurement stopped by User")
         GPIO.cleanup() 
-    logging.info("Setting LAND mode...")
-    vehicle.mode = VehicleMode("LAND")
-    #time.sleep(1)
-
-    #x.join()
-    logging.info("Main    : all done")    
-        
-
-    #quit()	
-    
-    # Uncomment the lines below for testing roll angle and yaw rate.
-    # Make sure that there is enough space for testing this.
-
-    # set_attitude(roll_angle = 1, thrust = 0.5, duration = 3)
-    # set_attitude(yaw_rate = 30, thrust = 0.5, duration = 3)
-
-    # Move the drone forward and backward.
-    # Note that it will be in front of original position due to inertia.
-    #print("Move forward")
-    #set_attitude(pitch_angle = 1, thrust = 0.5, duration = 3.21)
-
-    #print("Move backward")
-    #set_attitude(pitch_angle = -1, thrust = 0.5, duration = 3)    
-    
-    #time.sleep(10000)
-    
-    
-    
-    
-    # Close vehicle object before exiting script
+    logging.info("Completed")
     logging.info("Close vehicle object")
     vehicle.close()
 
