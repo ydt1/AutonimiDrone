@@ -18,7 +18,10 @@ connection_string = '/dev/ttyACM0'
 vehicle=0
 SETTINGS_FILE = "RTIMULib"
 current_altitude,r,p,y = 0.0,0.0,0.0,0.0
-
+controlR = 0
+controlP = 0 
+controlPCount = 8
+controlRCount = 8
 # set goip for hte ultrasonic sensor
 GPIO.setmode(GPIO.BOARD)
 GPIO_TRIGGER = 33
@@ -89,14 +92,37 @@ def connect2Drone():
     vehicle = connect(connection_string, wait_ready=True)
     logging.info("connected")
 
-
+def get_controlP_and_controlR():
+    global controlR 
+    global controlP
+    global controlPCount 
+    global controlRCount 
+    if (controlRCount % 8 ==0):     
+        if (r<0.040 and r > -0.040):
+            logging.debug ("r between -0.040 to 0.040")
+        elif (r<0):
+            controlR = 1
+        else:
+            controlR = -1
+    else:
+        controlRCount += 1
+    if (controlPCount % 8 ==0):       
+        if (p<0.040 and p > -0.040):
+            logging.debug ("p between -0.040 to 0.040")
+        elif (p<0.02):
+            controlP = 3.2
+        else:
+            controlP = -0.5       
+    else:
+        controlPCount = controlPCount + 1
+         
 def arm_and_takeoff_nogps(aTargetAltitude):
     """
     Arms vehicle and fly to aTargetAltitude without GPS data.
     """
     global vehicle
-    DEFAULT_TAKEOFF_THRUST = 0.55 #0.7
-    SMOOTH_TAKEOFF_THRUST = 0.55
+    DEFAULT_TAKEOFF_THRUST = 0.7 #0.7
+    SMOOTH_TAKEOFF_THRUST = 0.7
     #wait_for_calibrate()    
     logging.info("Basic pre-arm checks")
     # Don't let the user try to arm until autopilot is ready
@@ -116,11 +142,7 @@ def arm_and_takeoff_nogps(aTargetAltitude):
 	logging.info(" Waiting for arming...")
         time.sleep(1)
     logging.info(vehicle.armed)
-    logging.info("Taking off!")
-    controlR = 0
-    controlP = 0 
-    controlPCount = 8
-    controlRCount = 8 
+    logging.info("Taking off!") 
     CountThrust = 0
     thrust = DEFAULT_TAKEOFF_THRUST
     while True:
@@ -135,33 +157,32 @@ def arm_and_takeoff_nogps(aTargetAltitude):
             else:    
                 thrust = SMOOTH_TAKEOFF_THRUST
         CountThrust+=1
-        
-        if (controlRCount % 8 ==0):     
-            if (r<0.040 and r > -0.040):
-                logging.info ("r between -0.040 to 0.040")
-            elif (r<0):
-                controlR = 1
-            else:
-                controlR = -1
-        else:
-            controlRCount += 1
-        if (controlPCount % 8 ==0):       
-            if (p<0.040 and p > -0.040):
-                logging.info ("p between -0.040 to 0.040")
-            elif (p<0.02):
-                controlP = 3.2
-            else:
-                controlP = -0.5       
-        else:
-            controlPCount = controlPCount + 1
-            
+        get_controlP_and_controlR()    
         logging.info ("r: %.1f p: %.1f y: %.1f a: %.1f", r,p,y,current_altitude)
         logging.info("controlP: %.1f controlR %.1f thrust %.1f", controlP,controlR, thrust)
          # check the we don't get -1 on all values
         set_attitude(roll_angle = controlR, pitch_angle = controlP, thrust = thrust)
         
-        time.sleep(0.1)
-        
+        time.sleep(0.1)    
+def do_action():
+    logging.info("going right")
+    for i in range(1000):
+        get_controlP_and_controlR()
+        set_attitude(roll_angle = 5, pitch_angle = controlP, yaw_rate = 0.0, thrust = 0.5, duration = 0)
+        time.sleep(0.001)
+    logging.info("standing")
+    for i in range(3000):
+        get_controlP_and_controlR()
+        set_attitude(roll_angle = controlP, pitch_angle = controlP, yaw_rate = 0.0, thrust = 0.5, duration = 0)
+        time.sleep(0.001)
+    logging.info("going left")    
+    for i in range(1000): 
+        get_controlP_and_controlR()
+        set_attitude(roll_angle = -5, pitch_angle = controlP, yaw_rate = 0.0, thrust = 0.5, duration = 0)
+        time.sleep(0.001)
+    logging.info("landing")
+    vehicle.mode = VehicleMode("LAND")
+    
 def set_attitude(roll_angle = 0, pitch_angle = 0.0, yaw_rate = 0.0, thrust = 0.5, duration = 0):
     """
     Note that from AC3.3 the message should be re-sent every second (after about 3 seconds
@@ -264,7 +285,8 @@ def main():
         x.start()
         logging.info("Main    : wait for the thread to finish")   
         #Take off 2.5m in GUIDED_NOGPS mode.
-        arm_and_takeoff_nogps(1.3)  
+        arm_and_takeoff_nogps(1)  
+        do_action()
         #x.join()
         logging.info("Main    : all done") 
     except KeyboardInterrupt:
@@ -277,4 +299,5 @@ def main():
     logging.info("Completed")
 if __name__ == "__main__":
 	main()
+	
 	
