@@ -1,3 +1,5 @@
+# install opencv & numpy
+
 import cv2
 import numpy as np
 
