@@ -121,8 +121,8 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     Arms vehicle and fly to aTargetAltitude without GPS data.
     """
     global vehicle
-    DEFAULT_TAKEOFF_THRUST = 0.7 #0.7
-    SMOOTH_TAKEOFF_THRUST = 0.7
+    DEFAULT_TAKEOFF_THRUST = 0.55 # on full battery use 0.55, on low battery use 0.6 or 0.7
+    SMOOTH_TAKEOFF_THRUST = 0.55
     #wait_for_calibrate()    
     logging.info("Basic pre-arm checks")
     # Don't let the user try to arm until autopilot is ready
