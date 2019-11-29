@@ -11,34 +11,16 @@ import logging
 from dronekit import connect, VehicleMode, LocationGlobal, LocationGlobalRelative
 from pymavlink import mavutil # Needed for command message definitions
 
-import RPi.GPIO as GPIO
-import time
 
-GPIO.setmode(GPIO.BOARD)
-GPIO_TRIGGER = 33
-GPIO_ECHO = 35
-
-GPIO.setup(GPIO_TRIGGER, GPIO.OUT)
-GPIO.setup(GPIO_ECHO, GPIO.IN)
 
 connection_string = '/dev/ttyACM0'
 vehicle=0
 SETTINGS_FILE = "RTIMULib"
 current_altitude,r,p,y = 0.0,0.0,0.0,0.0
-
-
-def wait_for_calibrate():
-    global r
-    global p
-    global y
-    while (r == 0.0 and p == 0.0 and y == 0.0):
-        logging.info("still calibrate %.1f, %.1f, %.1f", r,p,y)
-        time.sleep(0.1)
-def truncFloat(f):
-    return float('%.2f'%f)
     
 def connect2Drone():
     global vehicle
+    
     # Connect to the Vehicle
     logging.info('Connecting to vehicle on: %s' % connection_string)
     vehicle = connect(connection_string, wait_ready=True)
@@ -75,10 +57,11 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     controlRCount = 8 
     
     while True:
-        
-        #current_altitude = vehicle.location.global_relative_frame.alt #take from the pix not accurate for us, will use ultrasonic
-        #logging.info(" Altitude: %s" % current_altitude)
-        if current_altitude >= aTargetAltitude*0.95: # Trigger just below target alt.
+        logging.info(vehicle.battery)
+        logging.info(vehicle.rangefinder)# will use the Lidar value and not the barometer one (vehicle.location.global_relative_frame.alt)
+        alt = vehicle.rangefinder.distance
+        logging.info(alt)
+        if alt >= aTargetAltitude*0.95: # Trigger just below target alt.
             logging.info("Reached target altitude")
             break
             
@@ -100,76 +83,36 @@ def arm_and_takeoff_nogps(aTargetAltitude):
                 controlP = -0.5       
         else:
             controlPCount = controlPCount + 1
-            
-        logging.info ("r: %.1f p: %.1f y: %.1f a: %.1f controlP: %.1f controlR %.1f", r,p,y,current_altitude, controlP,controlR)
-       
+          
+        
+        logging.info ("r: %.1f p: %.1f y: %.1f a: %.1f controlP: %.1f controlR %.1f", r,p,y,alt, controlP,controlR)
+        
         time.sleep(0.1)
         
-def get_distance(name):
-    global current_altitude
-    #*********** don't put any print / logging from here *************
-    logging.info("Starting get distance threading")
-    while True:
-        
-        GPIO.output(GPIO_TRIGGER, True)
-     
-        # set Trigger after 0.01ms to LOW
-        time.sleep(0.00001)
-        GPIO.output(GPIO_TRIGGER, False)
-     
-        StartTime = time.time()
-        StopTime = time.time()
-        
-        while GPIO.input(GPIO_ECHO) == 0:
-            StartTime = time.time()
-            
-        # save time of arrival
-        
-        while GPIO.input(GPIO_ECHO) == 1:
-            StopTime = time.time()
-            
-        #*********** don't put any print / logging up to here *************
-        
-        
-        # time difference between start and arrival
-        TimeElapsed = StopTime - StartTime
-        # multiply with the sonic speed (34300 cm/s)
-        # and divide by 2, because there and back
-        distance = (TimeElapsed * 34300) / 2
-        distance = float(distance / 100) # In meters...
-        
-        if abs(current_altitude-distance)>1 or distance > 5: # sometimes the ultrasonic sends bad high values - fliter them out
-            logging.info("distance too high, might be bad data %.1f", distance)
-        else:
-            current_altitude=distance
-        #logging.info(current_altitude)
-        time.sleep(0.2)    
 
 
    
 def main():
     
+    logging.basicConfig(format='%(asctime)s %(message)s',level=logging.INFO)
     
-    #logging.basicConfig(format='%(asctime)s %(message)s',level=logging.DEBUG,filename='test.log')
-    logging.basicConfig(format='%(asctime)s %(message)s',level=logging.DEBUG)
-
     connect2Drone()
     vehicle.add_attribute_listener('attitude', attitude_callback)
     try:
         logging.info("Main    : before creating thread")
-        x = threading.Thread(target=get_distance, args=(1,))
+        #x = threading.Thread(target=get_distance, args=(1,))
         logging.info("Main    : before running thread")
-        x.daemon = True
-        x.start()
+        #x.daemon = True
+        #x.start()
         logging.info("Main    : wait for the thread to finish")   
         #time.sleep(1000)
         #Take off 2.5m in GUIDED_NOGPS mode.
-        arm_and_takeoff_nogps(1.3)   
+        arm_and_takeoff_nogps(10.3)   
         #x.join()
         logging.info("Main    : all done") 
     except KeyboardInterrupt:
-        print("Measurement stopped by User")
-        GPIO.cleanup() 
+        print("stopped by User")
+         
     logging.info("Completed")
 if __name__ == "__main__":
 	main()
