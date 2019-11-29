@@ -9,9 +9,10 @@ from flask import render_template
 import imutils
 
 outputFrame = None
+streamFrame = None
 app = Flask(__name__)
 
-cap = cv2.VideoCapture(1)# select the roght webcam to use (on a laptop 0=built-in webcam, 1=USB webcam)
+cap = cv2.VideoCapture(0)# select the roght webcam to use (on a laptop 0=built-in webcam, 1=USB webcam)
 
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
@@ -31,6 +32,13 @@ def index():
 	# return the rendered template
 	return render_template("index.html")
 
+@app.route("/video_feed")
+def video_feed():
+	# return the response generated along with the specific media
+	# type (mime type)
+	return Response(streamFrame,
+		mimetype = "multipart/x-mixed-replace; boundary=frame")
+
 def nothing(x):
     pass
 
@@ -46,7 +54,10 @@ cv2.createTrackbar('V Max', 'Trackbar', 255, 255, nothing)
 
 
 kernel = np.ones((5, 5), np.uint8)
-
+print("0000")
+# start the flask app
+app.run(host="192.168.14.169", port="8080", debug=True,threaded=True, use_reloader=False)
+print("1111")
 
 while True:
     ret, img = cap.read()
@@ -95,6 +106,9 @@ while True:
     (flag, encodedImage) = cv2.imencode(".jpg", outputFrame)
     if not flag:
 	    continue
+
+    streamFrame = (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + 
+			bytearray(encodedImage) + b'\r\n')
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
