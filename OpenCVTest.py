@@ -3,19 +3,33 @@
 import cv2
 import numpy as np
 
-cap = cv2.VideoCapture(1)
+from flask import Response
+from flask import Flask
+from flask import render_template
+import imutils
 
-cap.set(3, 320)
-cap.set(4, 240)
+outputFrame = None
+app = Flask(__name__)
+
+cap = cv2.VideoCapture(1)# select the roght webcam to use (on a laptop 0=built-in webcam, 1=USB webcam)
+
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
 
 cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)  # disable auto focus
-cap.set(15, -100)
-cap.set(10, -1)
+# if using LED lights than disable exposure and brightness
+cap.set(cv2.CAP_PROP_EXPOSURE, -100)
+cap.set(cv2.CAP_PROP_BRIGHTNESS, -1)
 
-cap.set(5, 30)  # set FPS 30
+cap.set(cv2.CAP_PROP_FPS, 30)  # set FPS 30
 
 cv2.namedWindow('Trackbar')
 
+
+@app.route("/")
+def index():
+	# return the rendered template
+	return render_template("index.html")
 
 def nothing(x):
     pass
@@ -33,17 +47,18 @@ cv2.createTrackbar('V Max', 'Trackbar', 255, 255, nothing)
 
 kernel = np.ones((5, 5), np.uint8)
 
+
 while True:
     ret, img = cap.read()
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
     # define range of HSV
-    HSV_MAX = np.array([cv2.getTrackbarPos('H Max', 'Trackbar'), cv2.getTrackbarPos(
-        'S Max', 'Trackbar'), cv2.getTrackbarPos('V Max', 'Trackbar')])
     HSV_MIN = np.array([cv2.getTrackbarPos('H Min', 'Trackbar'), cv2.getTrackbarPos(
         'S Min', 'Trackbar'), cv2.getTrackbarPos('V Min', 'Trackbar')])
+    HSV_MAX = np.array([cv2.getTrackbarPos('H Max', 'Trackbar'), cv2.getTrackbarPos(
+        'S Max', 'Trackbar'), cv2.getTrackbarPos('V Max', 'Trackbar')])
 
-    # Threshold the HSV image to get only blue colors
+    # Threshold the HSV image what was defined in the trackbars
     threshold = cv2.inRange(hsv, HSV_MIN, HSV_MAX)
     #erosion = cv2.erode(threshold, kernel, iterations=1)
     dilation = cv2.dilate(threshold, kernel, iterations=1)
@@ -74,6 +89,12 @@ while True:
 
     cv2.imshow("image", img)
     cv2.imshow("threshold", closing)
+
+    # generate jpeg and HTTP stream it...example taken from https://www.pyimagesearch.com/2019/09/02/opencv-stream-video-to-web-browser-html-page/
+    outputFrame = img.copy()
+    (flag, encodedImage) = cv2.imencode(".jpg", outputFrame)
+    if not flag:
+	    continue
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
