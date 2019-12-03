@@ -77,12 +77,12 @@ def readFromCam():
         # for contour in contours:
         #     cv2.drawContours(img, contour, -1, (0, 255, 0), 3)
 
-        #closing = hsv
+        
         contours, _ = cv2.findContours(closing, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         if len(contours) > 0 :
             cv2.drawContours(img, contours, -1, (0,255,0), 3)
 
-            cnt = contours[0]
+            cnt = contours[0] # assume we have only one contour - not always true !!!
             
             M = cv2.moments(cnt)
 
