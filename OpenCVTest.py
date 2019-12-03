@@ -89,6 +89,10 @@ def readFromCam():
             cx = int(FRAME_WIDTH/2 - M['m10']/M['m00'])
             cy = int(FRAME_HEIGHT/2 - M['m01']/M['m00'])
             
+            
+            org = (10, 15)
+            img = cv2.putText(img, str(cx) +","+ str(cy),org,cv2.FONT_HERSHEY_SIMPLEX,0.4,(0,255,0))
+            
             print(cx, cy)
 
         if SHOW_WINDOWS:
@@ -152,6 +156,7 @@ def main():
         readFromCam()
     else:
         x = threading.Thread(target=readFromCam)
+        x.daemon = True
         x.start()    
         try:
             server = ThreadedHTTPServer(('', 8080), CamHandler)
