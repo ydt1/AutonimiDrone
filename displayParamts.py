@@ -67,6 +67,7 @@ def arm_and_takeoff_nogps(aTargetAltitude):
 
         # every 8 cycles we update the controlR/P values which are the degrees we send to the PIX    
         if (controlRCount % 8 ==0):     
+            controlR = 0
             if (r<0.040 and r > -0.040):
                 
                 #logging.info ("r between -0.040 to 0.040")
@@ -77,7 +78,9 @@ def arm_and_takeoff_nogps(aTargetAltitude):
                 controlR = -1
         else:
             controlRCount += 1
+        
         if (controlPCount % 8 ==0):       
+            controlP = 0 
             if (p<0.040 and p > -0.040):
                 #logging.info ("p between -0.040 to 0.040")
                 pass
