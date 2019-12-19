@@ -1,4 +1,4 @@
-import sys, getopt
+import sys
 
 sys.path.append('.')
 
@@ -7,6 +7,8 @@ import time
 import math
 import threading
 import logging
+from logging.handlers import RotatingFileHandler
+
 
 from dronekit import connect, VehicleMode, LocationGlobal, LocationGlobalRelative
 from pymavlink import mavutil # Needed for command message definitions
@@ -68,7 +70,7 @@ def arm_and_takeoff_nogps(aTargetAltitude):
         # every 8 cycles we update the controlR/P values which are the degrees we send to the PIX    
         if (controlRCount % 8 ==0):     
             controlR = 0
-            if (r<0.040 and r > -0.040):
+            if (r<0.050 and r > -0.050):
                 
                 #logging.info ("r between -0.040 to 0.040")
                 pass
@@ -81,7 +83,7 @@ def arm_and_takeoff_nogps(aTargetAltitude):
         
         if (controlPCount % 8 ==0):       
             controlP = 0 
-            if (p<0.040 and p > -0.040):
+            if (p<0.050 and p > -0.050):
                 #logging.info ("p between -0.040 to 0.040")
                 pass
             elif (p<0.02):
@@ -92,16 +94,28 @@ def arm_and_takeoff_nogps(aTargetAltitude):
             controlPCount = controlPCount + 1
           
         
-        logging.info ("r: %.1f p: %.1f y: %.1f a: %.1f controlP: %.1f controlR %.1f", r,p,y,alt, controlP,controlR)
+        logging.info ("r: %.3f p: %.3f y: %.1f a: %.3f controlP: %.1f controlR %.1f", r,p,y,alt, controlP,controlR)
         
-        time.sleep(0.2)
+        time.sleep(0.05)
         
 
 
-   
+def setupLogging():
+	logFormatter = logging.Formatter("%(asctime)s %(message)s")
+	rootLogger = logging.getLogger()
+	rootLogger.setLevel(logging.DEBUG)
+
+	fileHandler = RotatingFileHandler("displayParameters.log",maxBytes=5000000,backupCount=2)
+	fileHandler.setFormatter(logFormatter)
+	rootLogger.addHandler(fileHandler)
+
+	consoleHandler = logging.StreamHandler(sys.stdout)
+	consoleHandler.setFormatter(logFormatter)
+	rootLogger.addHandler(consoleHandler)
+
 def main():
-    
-    logging.basicConfig(format='%(asctime)s %(message)s',level=logging.INFO)
+    setupLogging()
+
     
     connect2Drone()
     vehicle.add_attribute_listener('attitude', attitude_callback)

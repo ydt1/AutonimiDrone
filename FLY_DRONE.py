@@ -1,43 +1,27 @@
-import sys, getopt
+import sys
 
 sys.path.append('.')
-import RTIMU
+
 import os.path
 import time
 import math
 import threading
 import logging
-import RPi.GPIO as GPIO
+from logging.handlers import RotatingFileHandler
 
 from dronekit import connect, VehicleMode, LocationGlobal, LocationGlobalRelative
 from pymavlink import mavutil # Needed for command message definitions
-from simple_pid import PID
+
 
 
 connection_string = '/dev/ttyACM0'
 vehicle=0
-SETTINGS_FILE = "RTIMULib"
 r,p,y = 0.0,0.0,0.0
 controlR = 0
 controlP = 0 
 controlPCount = 8
 controlRCount = 8
 
-
-def wait_for_calibrate():
-    global r
-    global p
-    global y
-    while (r == 0.0 and p == 0.0 and y == 0.0):
-        logging.info("still calibrate %.1f, %.1f, %.1f", r,p,y)
-        time.sleep(0.1)
-        
-       
-
-
-
-
-    
 def connect2Drone():
     global vehicle
     # Connect to the Vehicle
@@ -45,15 +29,15 @@ def connect2Drone():
     vehicle = connect(connection_string, wait_ready=True)
     logging.info("connected")
 
-def get_controlP_and_controlR():
+def getControlPcontrolR():
     global controlR 
     global controlP
     global controlPCount 
     global controlRCount 
-# every 8 cycles we update the controlR/P values which are the degrees we send to the PIX
+	# every 8 cycles we update the controlR/P values which are the degrees we send to the PIX
     if (controlRCount % 8 ==0):     
         controlR=0
-        if (r<0.040 and r > -0.040):
+        if (r > -0.040 and  r<0.040):
             #logging.debug ("r between -0.040 to 0.040")
             pass
         elif (r<0):
@@ -81,15 +65,20 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     Arms vehicle and fly to aTargetAltitude without GPS data.
     """
     global vehicle
-    DEFAULT_TAKEOFF_THRUST = 0.55  #0.7
-    SMOOTH_TAKEOFF_THRUST = 0.55
-    #wait_for_calibrate()    
+
+    # Thrust >  0.5: Ascend
+    # Thrust == 0.5: Hold the altitude
+    # Thrust <  0.5: Descend
+     
+	DEFAULT_TAKEOFF_THRUST = 0.55  #0.7
+    SMOOTH_TAKEOFF_THRUST = DEFAULT_TAKEOFF_THRUST - 0.1
+    
     logging.info("Basic pre-arm checks")
     # Don't let the user try to arm until autopilot is ready
     # If you need to disable the arming check, just comment it with your own responsibility.
-    #while not vehicle.is_armable:
-     #   logging.info(" Waiting for vehicle to initialise...")
-      #  time.sleep(1)
+    while not vehicle.is_armable:
+        logging.info(" Waiting for vehicle to initialise...")
+        time.sleep(1)
 
     logging.info("is armable=%s",vehicle.is_armable)
     logging.info("Arming motors")
@@ -102,9 +91,9 @@ def arm_and_takeoff_nogps(aTargetAltitude):
 	    logging.info(" Waiting for arming...")
 	    time.sleep(1)        
     
-    logging.info(vehicle.armed)
-    logging.info("Taking off!") 
-    CountThrust = 0
+    logging.info("vehicle.armed=",vehicle.armed)
+    logging.info("Taking off!!!") 
+    
     thrust = DEFAULT_TAKEOFF_THRUST
     while True:
         alt = 100 * vehicle.rangefinder.distance
@@ -113,34 +102,30 @@ def arm_and_takeoff_nogps(aTargetAltitude):
             logging.info("Reached target altitude")
             set_attitude(thrust = 0.5) 
             break
-        elif alt >= aTargetAltitude*0.6:
-            if CountThrust < 3:
-                thrust = DEFAULT_TAKEOFF_THRUST
-            else:    
-                thrust = SMOOTH_TAKEOFF_THRUST
-        CountThrust+=1
-        get_controlP_and_controlR()    
-        logging.info ("r: %.1f p: %.1f y: %.1f a: %.1f", r,p,y,alt)
-        logging.info("controlP: %.1f controlR %.1f thrust %.1f", controlP,controlR, thrust)
-         # check the we don't get -1 on all values
+        elif alt >= aTargetAltitude*0.6: # if we reached 60% of the altitude than slow down a little
+            thrust = SMOOTH_TAKEOFF_THRUST
+
+        getControlPcontrolR()    
+		logging.info ("r: %.3f p: %.3f y: %.1f a: %.3f controlP: %.1f controlR %.1f", r,p,y,alt, controlP,controlR)
+         # check that we don't get -1 on all values
         set_attitude(roll_angle = controlR, pitch_angle = controlP, thrust = thrust)
         
-        time.sleep(0.1) 
+        time.sleep(0.05) 
 
-def do_action():
+def doAction():
     logging.info("going right")
     for i in range(1000):
-        get_controlP_and_controlR()
+        getControlPcontrolR()
         set_attitude(roll_angle = 5, pitch_angle = controlP, yaw_rate = 0.0, thrust = 0.5, duration = 0)
         time.sleep(0.001)
     logging.info("standing")
     for i in range(3000):
-        get_controlP_and_controlR()
+        getControlPcontrolR()
         set_attitude(roll_angle = controlP, pitch_angle = controlP, yaw_rate = 0.0, thrust = 0.5, duration = 0)
         time.sleep(0.001)
     logging.info("going left")    
     for i in range(1000): 
-        get_controlP_and_controlR()
+        getControlPcontrolR()
         set_attitude(roll_angle = -5, pitch_angle = controlP, yaw_rate = 0.0, thrust = 0.5, duration = 0)
         time.sleep(0.001)
     logging.info("landing")
@@ -226,37 +211,43 @@ def attitude_callback(self, attr_name, value):
     global last_attitude_cache
     # Only publish when value changes
     if value!=last_attitude_cache:
-        #print(" CALLBACK: Attitude changed to", value.pitch)
-        logging.info ("r: %.3f p: %.3f y: %.1f a: %.1f", value.roll,value.pitch,value.yaw,vehicle.location.global_relative_frame.alt)
+        #logging.info ("r: %.3f p: %.3f y: %.1f a: %.1f", value.roll,value.pitch,value.yaw,vehicle.location.global_relative_frame.alt)
         r,p,y = value.roll,value.pitch,value.yaw
         last_attitude_cache=value
+
+		
+		
+def setupLogging():
+	logFormatter = logging.Formatter("%(asctime)s %(message)s")
+	rootLogger = logging.getLogger()
+	rootLogger.setLevel(logging.DEBUG)
+
+	fileHandler = RotatingFileHandler("flyDrone.log",maxBytes=5000000,backupCount=2)
+	fileHandler.setFormatter(logFormatter)
+	rootLogger.addHandler(fileHandler)
+
+	consoleHandler = logging.StreamHandler(sys.stdout)
+	consoleHandler.setFormatter(logFormatter)
+	rootLogger.addHandler(consoleHandler)
 
      
 def main():
     
-    
-    #logging.basicConfig(format='%(asctime)s %(message)s',level=logging.DEBUG,filename='test.log')
-    logging.basicConfig(format='%(asctime)s %(message)s',level=logging.INFO)
-    logging.info("\nAdd `attitude` attribute callback/observer on `vehicle`")  
+	setupLogging()    
     connect2Drone()
     vehicle.add_attribute_listener('attitude', attitude_callback)
     try:
-        logging.info("Main    : before creating thread")
-        logging.info("Main    : wait for the thread to finish")   
-        #Take off 2.5m in GUIDED_NOGPS mode.  
+          
+        #Take off 100cm in GUIDED_NOGPS mode.  
         arm_and_takeoff_nogps(100)  
-        #do_action()
-        #x.join()
-        logging.info("Main    : all done") 
+        doAction()
     except KeyboardInterrupt:
-        print("stopped by User")
+        logging.error("stopped by User")
         logging.info("landing")
         vehicle.mode = VehicleMode("LAND")         
+		vehicle.close()
     logging.info("Completed")
-    logging.info("Close vehicle object")
     vehicle.close()
-
-    logging.info("Completed")
 if __name__ == "__main__":
 	main()
 	
