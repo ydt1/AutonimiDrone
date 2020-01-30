@@ -94,7 +94,7 @@ def arm_and_takeoff_nogps(aTargetAltitude):
             controlPCount = controlPCount + 1
           
         
-        logging.info ("r: %.3f p: %.3f y: %.1f a: %.3f controlP: %.1f controlR %.1f", r,p,y,alt, controlP,controlR)
+        logging.info ("r: %.3f p: %.3f y: %.1f a: %.3f controlP: %.1f controlR %.1f battery: %.1f", r,p,y,alt, controlP,controlR,vehicle.battery.voltage)
         
         time.sleep(0.05)
         
@@ -121,15 +121,9 @@ def main():
     vehicle.add_attribute_listener('attitude', attitude_callback)
     try:
         logging.info("Main    : before creating thread")
-        #x = threading.Thread(target=get_distance, args=(1,))
         logging.info("Main    : before running thread")
-        #x.daemon = True
-        #x.start()
         logging.info("Main    : wait for the thread to finish")   
-        #time.sleep(1000)
-        #Take off 2.5m in GUIDED_NOGPS mode.
         arm_and_takeoff_nogps(1000)   
-        #x.join()
         logging.info("Main    : all done") 
     except KeyboardInterrupt:
         print("stopped by User")

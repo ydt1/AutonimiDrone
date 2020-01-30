@@ -58,7 +58,7 @@ def main():
 	capture.set(cv2.CAP_PROP_SATURATION,0.8)
 	capture.set(cv2.CAP_PROP_EXPOSURE, -100) 
 	capture.set(cv2.CAP_PROP_BRIGHTNESS, -1)
-	global img
+	
 	try:
 		server = ThreadedHTTPServer(('', 8080), CamHandler)
 		print "server started"
