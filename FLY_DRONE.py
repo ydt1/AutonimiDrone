@@ -1,6 +1,7 @@
 '''
 TODO:
-1. add controlA se we stay on the same altitude after take off  
+1. add controlA se we stay on the same altitude after take off 
+2. on doAction use timestampe and not i-range to controll how much time we do every operation 
 
 '''
 
@@ -28,7 +29,7 @@ controlR = 0
 controlP = 0 
 controlPCount = 8
 controlRCount = 8
-DEFAULT_TAKEOFF_THRUST = 0.65  #0.7
+DEFAULT_TAKEOFF_THRUST = 0.6   #0.7
 SMOOTH_TAKEOFF_THRUST = DEFAULT_TAKEOFF_THRUST - 0.1
 
 def connect2Drone():
@@ -74,9 +75,7 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     """
     Arms vehicle and fly to aTargetAltitude without GPS data.
     """
-    global vehicle
-    DEFAULT_TAKEOFF_THRUST
-    SMOOTH_TAKEOFF_THRUST
+
 
     # Thrust >  0.5: Ascend
     # Thrust == 0.5: Hold the altitude
@@ -128,19 +127,20 @@ def printDroneInfo():
 
 def doAction():
     logging.info("standing...")
-    for i in range(2000):
+    for i in range(1000):
         getControlPcontrolR()
         set_attitude(roll_angle = controlR, pitch_angle = controlP, yaw_rate = 0.0, thrust = SMOOTH_TAKEOFF_THRUST, duration = 0)
+        logging.info("i= %d" , i)
         time.sleep(0.001)
-    
-
+   
+    ''' 
     logging.info("going left")
     for i in range(500):
         getControlPcontrolR()
         set_attitude(roll_angle = -3, pitch_angle = 10, yaw_rate = 0.0, thrust = SMOOTH_TAKEOFF_THRUST, duration = 0)
         time.sleep(0.001)
     logging.info("landing...")
-    '''
+    
     for i in range(3000):
         getControlPcontrolR()
         set_attitude(roll_angle = controlP, pitch_angle = controlP, yaw_rate = 0.0, thrust = 0.5, duration = 0)
@@ -152,6 +152,7 @@ def doAction():
         time.sleep(0.001)
     logging.info("landing")
     '''
+    logging.info("Landing on Do action...")
     vehicle.mode = VehicleMode("LAND")
     
 def set_attitude(roll_angle = 0, pitch_angle = 0.0, yaw_rate = 0.0, thrust = 0.5, duration = 0):
@@ -260,11 +261,10 @@ def main():
     connect2Drone()
     vehicle.add_attribute_listener('attitude', attitude_callback)
     try:
-          
         #Take off 100cm in GUIDED_NOGPS mode.  
         arm_and_takeoff_nogps(100)  
         doAction()
-    except KeyboardInterrupt:
+    except:
         logging.error("stopped by User")
         logging.info("landing")
         vehicle.mode = VehicleMode("LAND")         
