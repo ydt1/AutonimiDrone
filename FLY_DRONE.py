@@ -1,10 +1,7 @@
 '''
 TODO:
-1. add controlA se we stay on the same altitude after take off 
-2. on doAction use timestampe and not i-range to controll how much time we do every operation 
-
+1. play with contolA need to see how much need put the trust
 '''
-
 
 import sys
 
@@ -25,10 +22,14 @@ from pymavlink import mavutil # Needed for command message definitions
 connection_string = '/dev/ttyACM0'
 vehicle=0
 r,p,y = 0.0,0.0,0.0
+alt = 0
 controlR = 0
 controlP = 0 
+controlA = 0 
 controlPCount = 8
 controlRCount = 8
+controlACount = 8
+
 DEFAULT_TAKEOFF_THRUST = 0.6   #0.7
 SMOOTH_TAKEOFF_THRUST = DEFAULT_TAKEOFF_THRUST - 0.1
 
@@ -42,10 +43,12 @@ def connect2Drone():
 def getControlPcontrolR():
     global controlR 
     global controlP
+    global controlA
+    global controlACount 
     global controlPCount 
     global controlRCount 
 	# every 8 cycles we update the controlR/P values which are the degrees we send to the PIX
-    if (controlRCount % 8 ==0):     
+    if (controlRCount % 8 == 0):     
         controlR=0
         if (r > -0.040 and  r<0.040):
             #logging.debug ("r between -0.040 to 0.040")
@@ -57,7 +60,7 @@ def getControlPcontrolR():
     else:
         controlRCount += 1
 
-    if (controlPCount % 8 ==0):       
+    if (controlPCount % 8 == 0):       
         controlP=0
         if (p<0.040 and p > -0.040):
             pass
@@ -67,7 +70,19 @@ def getControlPcontrolR():
         else:
             controlP = -0.5       
     else:
-        controlPCount = controlPCount + 1
+        controlPCount += 1
+
+    #control the alt in do action
+    if (controlACount % 8 == 0):       
+        controlA=0
+        if (alt < 150):
+            pass
+            #logging.debug ("A between -0.040 to 0.040")
+        else:
+            controlA = 0.6 # Need to low the trust to go down in height(need to play with the trust)    
+    else:
+        controlACount += 1
+
     printDroneInfo()
 
 # aTargetAltitude in CM         
@@ -75,13 +90,10 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     """
     Arms vehicle and fly to aTargetAltitude without GPS data.
     """
-
-
     # Thrust >  0.5: Ascend
     # Thrust == 0.5: Hold the altitude
     # Thrust <  0.5: Descend
-     
-    
+    global alt
     logging.info("Basic pre-arm checks")
     # Don't let the user try to arm until autopilot is ready
     # If you need to disable the arming check, just comment it with your own responsibility.
@@ -122,16 +134,15 @@ def arm_and_takeoff_nogps(aTargetAltitude):
         time.sleep(0.05) 
 
 def printDroneInfo():
-    alt = 100 * vehicle.rangefinder.distance
     logging.info ("r: %.3f p: %.3f y: %.1f a: %.3f controlP: %.1f controlR: %.1f battery: %s", r,p,y,alt, controlP,controlR,vehicle.battery)    
 
 def doAction():
     logging.info("standing...")
-    for i in range(1000):
+    t,t1 = time.time(), time.time()
+    while((t1 - t) <= 3): # do not equal the (t1 - t) to the seconds u want because its can be a infinity loop do <=  
         getControlPcontrolR()
         set_attitude(roll_angle = controlR, pitch_angle = controlP, yaw_rate = 0.0, thrust = SMOOTH_TAKEOFF_THRUST, duration = 0)
-        logging.info("i= %d" , i)
-        time.sleep(0.001)
+        t1 = time.time()
    
     ''' 
     logging.info("going left")
