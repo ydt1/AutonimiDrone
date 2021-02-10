@@ -13,6 +13,8 @@ import math
 import threading
 import logging
 from logging.handlers import RotatingFileHandler
+import pyrealsense2 as rs
+ 
 
 from dronekit import connect, VehicleMode, LocationGlobal, LocationGlobalRelative
 from pymavlink import mavutil # Needed for command message definitions
@@ -33,12 +35,35 @@ controlACount = 8
 DEFAULT_TAKEOFF_THRUST = 0.6   #0.7
 SMOOTH_TAKEOFF_THRUST = DEFAULT_TAKEOFF_THRUST - 0.1
 
+# Declare RealSense pipeline, encapsulating the actual device and sensors
+pipe = rs.pipeline()
+
+# Build config object and request pose data
+cfg = rs.config()
+cfg.enable_stream(rs.stream.pose)
+
+# Start streaming with requested config
+pipe.start(cfg)
+
 def connect2Drone():
     global vehicle
     # Connect to the Vehicle
     logging.info('Connecting to vehicle on: %s' % connection_string)
     vehicle = connect(connection_string, wait_ready=True)
     logging.info("connected")
+
+
+def getPoseRs2():
+    frame = pipe.wait_for_frames()
+
+    # Fetch pose frame
+    pose = frame.get_pose_frame()
+    if pose:
+        # Print some of the pose data to the terminal
+        data = pose.get_pose_data()
+        print("Frame #{}".format(pose.frame_number))
+        print("Position: {}".format(data.translation))
+
 
 def getControlPcontrolR():
     global controlR 
@@ -134,6 +159,7 @@ def arm_and_takeoff_nogps(aTargetAltitude):
         time.sleep(0.05) 
 
 def printDroneInfo():
+    getPoseRs2()
     logging.info ("r: %.3f p: %.3f y: %.1f a: %.3f controlP: %.1f controlR: %.1f battery: %s", r,p,y,alt, controlP,controlR,vehicle.battery)    
 
 def doAction():

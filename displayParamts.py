@@ -8,6 +8,7 @@ import math
 import threading
 import logging
 from logging.handlers import RotatingFileHandler
+import pyrealsense2 as rs
 
 
 from dronekit import connect, VehicleMode, LocationGlobal, LocationGlobalRelative
@@ -19,7 +20,18 @@ connection_string = '/dev/ttyACM0'
 vehicle=0
 SETTINGS_FILE = "RTIMULib"
 current_altitude,r,p,y = 0.0,0.0,0.0,0.0
-    
+
+# Declare RealSense pipeline, encapsulating the actual device and sensors
+pipe = rs.pipeline()
+
+# Build config object and request pose data
+cfg = rs.config()
+cfg.enable_stream(rs.stream.pose)
+
+# Start streaming with requested config
+pipe.start(cfg)
+
+
 def connect2Drone():
     global vehicle
     
@@ -27,7 +39,18 @@ def connect2Drone():
     logging.info('Connecting to vehicle on: %s' % connection_string)
     vehicle = connect(connection_string, wait_ready=True)
     logging.info("connected")
-   
+
+def getPoseRs2():
+    frame = pipe.wait_for_frames()
+
+    # Fetch pose frame
+    pose = frame.get_pose_frame()
+    if pose:
+        # Print some of the pose data to the terminal
+        data = pose.get_pose_data()
+        print("Frame #{}".format(pose.frame_number))
+        print("Position: {}".format(data.translation))
+
 #Define callback for `vehicle.attitude` observer
 last_attitude_cache = None
 def attitude_callback(self, attr_name, value):
@@ -55,9 +78,10 @@ def arm_and_takeoff_nogps(aTargetAltitude):
     global vehicle
     controlR = 0
     controlP = 0 
+    controlA = 0 
     controlPCount = 8
     controlRCount = 8 
-    
+    controlACount = 8
     while True:
         #logging.info(vehicle.battery)
         #logging.info(vehicle.rangefinder)# will use the Lidar value and not the barometer one (vehicle.location.global_relative_frame.alt)
@@ -92,8 +116,19 @@ def arm_and_takeoff_nogps(aTargetAltitude):
                 controlP = -0.5       
         else:
             controlPCount = controlPCount + 1
+           
+        #control the alt in do action
+        if (controlACount % 8 == 0):       
+            controlA=0
+            if (alt < 150):
+                pass
+                #logging.debug ("A between -0.040 to 0.040")
+            else:
+                controlA = 0.6 # Need to low the trust to go down in height(need to play with the trust)    
+        else:
+            controlACount += 1    
           
-        
+        getPoseRs2()
         logging.info ("r: %.3f p: %.3f y: %.1f a: %.3f controlP: %.1f controlR %.1f battery: %.1f", r,p,y,alt, controlP,controlR,vehicle.battery.voltage)
         
         time.sleep(0.05)
