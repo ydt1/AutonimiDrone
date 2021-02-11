@@ -1,9 +1,9 @@
 import cv2
 from PIL import Image
 import threading
-from BaseHTTPServer import BaseHTTPRequestHandler,HTTPServer
-from SocketServer import ThreadingMixIn
-import StringIO
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
+from io import StringIO, BytesIO
 import time
 capture=None
 
@@ -21,12 +21,12 @@ class CamHandler(BaseHTTPRequestHandler):
 					
 					imgRGB=cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
 					jpg = Image.fromarray(imgRGB)
-					tmpFile = StringIO.StringIO()
+					tmpFile = BytesIO()
 					jpg.save(tmpFile,'JPEG')
 					
-					self.wfile.write("--jpgboundary")
+					self.wfile.write(b'--jpgboundary')
 					self.send_header('Content-type','image/jpeg')
-					self.send_header('Content-length',str(tmpFile.len))
+					self.send_header('Content-length',str(tmpFile.getbuffer().nbytes))
 					self.end_headers()
 					
 					self.wfile.write( tmpFile.getvalue() )#jpg.save(self.wfile,'JPEG')
@@ -55,16 +55,16 @@ def main():
 	capture.set(cv2.CAP_PROP_AUTOFOCUS, 0)
 	capture.set(cv2.CAP_PROP_FRAME_WIDTH, 320) 
 	capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
-	capture.set(cv2.CAP_PROP_SATURATION,0.8)
-	capture.set(cv2.CAP_PROP_EXPOSURE, -100) 
-	capture.set(cv2.CAP_PROP_BRIGHTNESS, -1)
+	#capture.set(cv2.CAP_PROP_SATURATION,0.8)
+	#capture.set(cv2.CAP_PROP_EXPOSURE, -100) 
+	#capture.set(cv2.CAP_PROP_BRIGHTNESS, -1)
 	
 	try:
 		server = ThreadedHTTPServer(('', 8080), CamHandler)
-		print "server started"
+		print ("server started")
 		server.serve_forever()
 	except KeyboardInterrupt:
-		print "about to exit.."
+		print ("about to exit..")
 		capture.release()
 		server.socket.close()
 		quit()
