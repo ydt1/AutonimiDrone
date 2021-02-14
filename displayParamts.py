@@ -8,7 +8,7 @@ import math
 import threading
 import logging
 from logging.handlers import RotatingFileHandler
-import pyrealsense2 as rs
+import pyrealsense2.pyrealsense2 as rs
 
 
 from dronekit import connect, VehicleMode, LocationGlobal, LocationGlobalRelative
@@ -48,8 +48,11 @@ def getPoseRs2():
     if pose:
         # Print some of the pose data to the terminal
         data = pose.get_pose_data()
-        print("Frame #{}".format(pose.frame_number))
-        print("Position: {}".format(data.translation))
+        # logging.info("Frame #{}".format(pose.frame_number))
+        logging.info("Position: {}".format(data.translation))
+        logging.info("Velocity: {}".format(data.velocity))
+        logging.info("Acceleration: {}".format(data.acceleration))
+
 
 #Define callback for `vehicle.attitude` observer
 last_attitude_cache = None
@@ -129,14 +132,14 @@ def arm_and_takeoff_nogps(aTargetAltitude):
             controlACount += 1    
           
         getPoseRs2()
-        logging.info ("r: %.3f p: %.3f y: %.1f a: %.3f controlP: %.1f controlR %.1f battery: %.1f", r,p,y,alt, controlP,controlR,vehicle.battery.voltage)
+        logging.info ("r: %.3f p: %.3f y: %.1f a: %.3f controlP: %.1f controlR %.1f battery: %.1f\n", r,p,y,alt, controlP,controlR,vehicle.battery.voltage)
         
         time.sleep(0.05)
         
 
 
 def setupLogging():
-	logFormatter = logging.Formatter("%(asctime)s %(message)s")
+	logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] %(message)s")
 	rootLogger = logging.getLogger()
 	rootLogger.setLevel(logging.DEBUG)
 
@@ -150,20 +153,17 @@ def setupLogging():
 
 def main():
     setupLogging()
+    logging.info("Starting")
 
     
     connect2Drone()
     vehicle.add_attribute_listener('attitude', attitude_callback)
     try:
-        logging.info("Main    : before creating thread")
-        logging.info("Main    : before running thread")
-        logging.info("Main    : wait for the thread to finish")   
         arm_and_takeoff_nogps(1000)   
-        logging.info("Main    : all done") 
     except KeyboardInterrupt:
         print("stopped by User")
          
     logging.info("Completed")
 if __name__ == "__main__":
-	main()
+    main()
 	
