@@ -16,9 +16,8 @@ import Drone_Commands
 
 DLTA_DIF = 30
 W = 320
-H = 240 
+H = 240
 drone = Drone_Commands.cmd()
-
 
 default_model_dir = '/home/pi/dev/new_human_detect_with_fly_drone'
 default_model = 'mobilenet_ssd_v1_coco_quant_postprocess_edgetpu.tflite'  # works faster for person detection
@@ -44,32 +43,52 @@ def index():
     return render_template("index.html")
 
 
-def tracking(objects):
+def tracking(objects, rects):
     first_object = True
     for (objectID, centroid) in objects.items():
         if first_object:
             first_object = False
-            if W/2 < centroid[0]:
-                if abs(centroid[0] - W/2) < DLTA_DIF:
+            for i in range(len(rects)):
+                (startX, startY, endX, endY) = rects[i]
+                if int((startX + endX) / 2.0) == centroid[0] and int((startY + endY) / 2.0) == centroid[1]:
+                    break
+            if W / 2 < centroid[0]:
+                if abs(centroid[0] - W / 2) < DLTA_DIF:
                     print("W right in the center")
-                else: 
-                    print("go right")            
-                    drone.goto(0,0.1)
-            elif W/2 > centroid[0]:
-                if abs(centroid[0] - W/2) < DLTA_DIF:       
+                else:
+                    print("go right")
+                    drone.goto(0, 0.1)
+            elif W / 2 > centroid[0]:
+                if abs(centroid[0] - W / 2) < DLTA_DIF:
                     print("W left in the center")
                 else:
                     print("go left")
-                    drone.goto(0,-0.1)
-            else: 
+                    drone.goto(0, -0.1)
+            else:
                 print("x in the center")
 
-            # if H/2 < centroid[1]
-            #     print("go up")
-            # if H/2 > centroid[1]:
-            #     print("go down")
-            # else: 
-            #     print("y in the center")       
+            if H / 2 < centroid[1]:
+                if abs(centroid[0] - H / 2) < DLTA_DIF:
+                    print("W right in the center")
+                else:
+                    print("go up")
+                    drone.goto_position_target_local_ned(0, 0, -0.1)
+            elif H / 2 > centroid[1]:
+                if abs(centroid[0] - H / 2) < DLTA_DIF:
+                    print("W right in the center")
+                else:
+                    print("go down")
+                    drone.goto_position_target_local_ned(0, 0, 0.1)
+            else:
+                print("y in the center")
+            # detectionArea = abs(endX-startX) * abs(endY-startY)
+            # if detectionArea > 30:
+            #     print("go back")
+            # elif detectionArea < 60:
+            #     print("go forward")
+            # else:
+            #     print("At the right distance")
+
 
 
 def append_objs_to_img(cv2_im, inference_size, objs):
@@ -85,20 +104,26 @@ def append_objs_to_img(cv2_im, inference_size, objs):
             box = (x0, y0, x1, y1)
             rects.append(box)
             (startX, startY, endX, endY) = box
-            cv2.rectangle(cv2_im, (startX, startY), (endX, endY),(0, 255, 0), 2)
+            cv2.rectangle(cv2_im, (startX, startY), (endX, endY), (0, 255, 0), 2)
     objects = ct.update(rects)
     for (objectID, centroid) in objects.items():
-		# draw both the ID of the object and the centroid of the
-		# object on the output frame
+        # draw both the ID of the object and the centroid of the
+        # object on the output frame
         text = "ID {}".format(objectID)
         cv2.putText(cv2_im, text, (centroid[0] - 10, centroid[1] - 10),
-        	cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
         if objectID == 0:
+            for i in range(len(rects)):
+                (startX, startY, endX, endY) = rects[i]
+                if int((startX + endX) / 2.0) == centroid[0] and int((startY + endY) / 2.0) == centroid[1]:
+                    break
+            cv2.rectangle(cv2_im, (startX, startY), (endX, endY), (0, 0, 255), 2)
             cv2.circle(cv2_im, (centroid[0], centroid[1]), 4, (0, 0, 255), -1)
-        else :
-            cv2.circle(cv2_im, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)    
-    tracking(objects)        
+        else:
+            cv2.circle(cv2_im, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
+    tracking(objects, rects)
     return cv2_im
+
 
 def capture_v():
     global outputFrame, lock
@@ -198,6 +223,7 @@ def main():
                 threaded=True, use_reloader=False)
     except:
         drone.land()
+
 
 if __name__ == '__main__':
     main()
