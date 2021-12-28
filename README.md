@@ -1,5 +1,5 @@
 # AutonimiDrone
-Controll PX4 from Python
+Controll a Pixhawk from Python
 
 This is a learning project for the YDT (Yerucham Drone Team)
 
